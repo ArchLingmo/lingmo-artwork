@@ -1,0 +1,262 @@
+<!doctype html><html><body style="margin:0;background:#000">
+<canvas id="c"></canvas>
+<script>
+const Q=new URLSearchParams(location.search), ID=Q.get('id'), W=+Q.get('w')||1920, H=+Q.get('h')||1080;
+const cv=document.getElementById('c'); cv.width=W; cv.height=H;
+// ---------- deterministic random ----------
+let seed=+(Q.get('seed')||7); function rnd(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;}
+
+// ---------- WebGL helper ----------
+function runShader(frag){
+  const gl=cv.getContext('webgl2',{preserveDrawingBuffer:true,antialias:false});
+  const vs=`#version 300 es
+  in vec2 p; void main(){gl_Position=vec4(p,0,1);}`;
+  const fs=`#version 300 es
+  precision highp float; uniform vec2 R; out vec4 o;
+  #define TAU 6.28318530718
+  mat2 rot(float a){float c=cos(a),s=sin(a);return mat2(c,-s,s,c);}
+  float h21(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
+  float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+    return mix(mix(h21(i),h21(i+vec2(1,0)),f.x),mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x),f.y);}
+  float fbm(vec2 p){float a=.5,s=0.;for(int i=0;i<5;i++){s+=a*vn(p);p=rot(.5)*p*2.03;a*=.5;}return s;}
+  ${frag}
+  void main(){
+    vec3 acc=vec3(0);
+    for(int i=0;i<2;i++)for(int j=0;j<2;j++){
+      vec2 fc=gl_FragCoord.xy+vec2(float(i),float(j))*.5-.25;
+      vec2 uv=(fc-.5*R)/R.y; uv.y=-uv.y*-1.;
+      acc+=shade(uv, fc/R);
+    }
+    vec3 col=acc/4.;
+    col+= (h21(gl_FragCoord.xy)-.5)/255.;   // dither, avoids banding
+    o=vec4(col,1);
+  }`;
+  function sh(t,s){const x=gl.createShader(t);gl.shaderSource(x,s);gl.compileShader(x);
+    if(!gl.getShaderParameter(x,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(x));return x;}
+  const pr=gl.createProgram();gl.attachShader(pr,sh(gl.VERTEX_SHADER,vs));gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,fs));gl.linkProgram(pr);gl.useProgram(pr);
+  const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
+  const l=gl.getAttribLocation(pr,'p');gl.enableVertexAttribArray(l);gl.vertexAttribPointer(l,2,gl.FLOAT,false,0,0);
+  gl.uniform2f(gl.getUniformLocation(pr,'R'),W,H);gl.viewport(0,0,W,H);gl.drawArrays(gl.TRIANGLES,0,3);gl.finish();
+}
+
+// ================= 1. WAFER (escuro) =================
+const WAFER=`
+vec3 shade(vec2 uv, vec2 s){
+  // fundo
+  vec3 col=mix(vec3(.012,.02,.05),vec3(.03,.07,.17),smoothstep(-.6,.7,uv.x*.6-uv.y*.5));
+  col+=vec3(.05,.12,.35)*exp(-3.*length(uv-vec2(.55,-.3)));
+  vec2 c=vec2(.62,-.42); float Rw=.86;
+  vec2 p=uv-c; float r=length(p);
+  // corte reto (flat) do wafer
+  float flt=dot(p,normalize(vec2(-.6,.8)))-Rw*.93;
+  float d=max(r-Rw,flt);
+  float inside=smoothstep(.0015,-.0015,d);
+  // sombra/halo
+  col+=vec3(.08,.2,.6)*.35*exp(-max(d,0.)*9.)*(1.-inside);
+  // iridescência de filme fino
+  vec2 q=rot(.18)*p;
+  float ph=r*.75+.18*fbm(q*2.)+dot(uv,vec2(.22,.38));
+  float t=.5+.5*sin(TAU*ph);
+  vec3 iri=mix(vec3(.10,.25,.85),vec3(.55,.35,.95),t);       // azul -> violeta
+  iri=mix(iri,vec3(.35,.85,1.),pow(.5+.5*sin(TAU*ph*1.7+1.3),3.)); // toques de ciano
+  vec3 base=vec3(.03,.05,.13)+iri*.32;
+  // brilho especular em faixa
+  float band=exp(-pow(dot(p,normalize(vec2(.8,.6)))+.18,2.)*18.);
+  base+=vec3(.55,.75,1.)*band*.55+iri*band*.25;
+  // grade de chips (dies)
+  float die=.038; vec2 g=q/die; vec2 f=fract(g)-.5; vec2 id=floor(g);
+  float gap=max(abs(f.x),abs(f.y)); float line=smoothstep(.47,.5,gap);
+  // circuito interno de cada chip
+  vec2 f2=fract(g*6.)-.5; float inner=smoothstep(.42,.5,max(abs(f2.x),abs(f2.y)))*step(gap,.36);
+  float alive=step(length((id+.5)*die),Rw-.05);
+  base=mix(base,base*.45+vec3(.02,.03,.06),line*.85*alive);
+  base+=iri*.10*inner*alive;
+  base*=mix(1.,.7+.6*h21(id),.18*alive);
+  // borda chanfrada
+  float rim=exp(-abs(d)*260.); base+=vec3(.7,.85,1.)*rim*.8;
+  col=mix(col,base,inside);
+  // poeira de luz
+  
+  // vinheta
+  col*=1.-.35*pow(length(s-.5)*1.25,2.5);
+  return col;
+}`;
+
+// ================= 3. VIDRO (claro) =================
+const GLASS=`
+float yb(float x,float k){ // fronteira da folha k
+  return -.62+k*.2 + .2*sin(x*1.1+k*.7) + .06*sin(x*2.4-k*1.3+1.) + x*.3;
+}
+vec3 shade(vec2 uv, vec2 s){
+  vec3 top=vec3(.93,.96,1.), bot=vec3(.80,.88,.98);
+  vec3 col=mix(bot,top,smoothstep(-.6,.6,uv.y));
+  col+=vec3(.06,.03,.0)*exp(-2.*length(uv-vec2(-.5,.45)));
+  float x=uv.x;
+  for(int i=0;i<5;i++){
+    float k=float(i);
+    float y=yb(x,k);
+    float d=uv.y-y;            // >0 acima da borda
+    float thick=.16+.07*sin(x*1.3+k*1.9);
+    // folha de vidro: faixa logo abaixo da borda, com espessura
+    float sheet=smoothstep(.0,-.004,d)*smoothstep(-thick-.004,-thick,d);
+    vec3 tint=mix(vec3(.55,.75,1.),vec3(.35,.55,.98),k/6.);
+    tint=mix(tint,vec3(.70,.66,1.),.3*(.5+.5*sin(x*1.6+k)));
+    float tIn=clamp(-d/thick,0.,1.);
+    col+=vec3(1.)*exp(-abs(d+thick)*700.)*.35*step(-thick-.01,d);
+    vec3 glass=mix(tint*1.08,tint*.78,tIn);
+    glass+=vec3(1)*pow(1.-tIn,6.)*.5;      // brilho no topo
+    glass+=vec3(.9,.97,1.)*pow(tIn,14.)*.35;
+    glass=mix(glass,col,.25);
+    col=mix(col,glass,sheet*(.38+.06*k));
+    // aresta brilhante
+    col+=vec3(1.)*exp(-abs(d)*900.)*.75;
+    // sombra suave abaixo
+    col*=1.-.10*exp(-max(-(d+thick),0.)*28.)*step(d,-thick);
+  }
+  col=mix(col,vec3(.96,.98,1.),.05);
+  col*=1.-.12*pow(length(s-.5)*1.3,3.);
+  return col;
+}`;
+
+// ================= 5. CÁUSTICA (claro) =================
+const CAUSTIC=`
+float caus(vec2 uv, float t){
+  vec2 p=mod(uv*TAU*1.6,TAU)-250.; vec2 i=p; float c=1., inten=.005;
+  for(int n=0;n<5;n++){
+    float tt=t*(1.-(3.5/float(n+1)));
+    i=p+vec2(cos(tt-i.x)+sin(tt+i.y),sin(tt-i.y)+cos(tt+i.x));
+    c+=1./length(vec2(p.x/(sin(i.x+tt)/inten),p.y/(cos(i.y+tt)/inten)));
+  }
+  c/=5.; c=1.17-pow(c,1.4); return pow(abs(c),8.);
+}
+vec3 shade(vec2 uv, vec2 s){
+  vec2 w=uv*rot(.35); w+=.08*vec2(fbm(uv*2.),fbm(uv*2.+9.));
+  float c1=caus(w,3.1), c2=caus(w*1.02+.004,3.1), c3=caus(w*1.04+.008,3.1); // dispersão
+  vec3 base=mix(vec3(.84,.91,1.),vec3(.62,.78,.99),smoothstep(-.7,.9,uv.x-uv.y*.6));
+  float beam=smoothstep(1.4,.0,length(uv-vec2(.65,.15)));
+  vec3 light=vec3(c1*.7,c2*.85,c3)*vec3(.9,.95,1.);
+  base=mix(base,vec3(.45,.62,.95),.35*(1.-beam));
+  vec3 col=base*(.9+.1*beam)+light*(.2+.8*beam)*.95;
+  col=mix(col,col*vec3(.85,.9,1.),.3*(1.-beam));
+  col=min(col,vec3(1.));
+  col*=1.-.1*pow(length(s-.5)*1.3,3.);
+  return col;
+}`;
+
+// ================= 2. REDE CRISTALINA (escuro, canvas) =================
+function lattice(){
+  const g=cv.getContext('2d');
+  const bg=g.createLinearGradient(0,0,W,H); bg.addColorStop(0,'#03060f'); bg.addColorStop(.55,'#071433'); bg.addColorStop(1,'#0d2a6b');
+  g.fillStyle=bg; g.fillRect(0,0,W,H);
+  const glow=g.createRadialGradient(W*.68,H*.55,0,W*.68,H*.55,W*.55); glow.addColorStop(0,'rgba(60,120,255,.35)'); glow.addColorStop(1,'rgba(60,120,255,0)');
+  g.fillStyle=glow; g.fillRect(0,0,W,H);
+  // estrutura do diamante (silício)
+  const basis=[[0,0,0],[0,.5,.5],[.5,0,.5],[.5,.5,0]], atoms=[], N=4;
+  for(let x=-N;x<N;x++)for(let y=-N;y<N;y++)for(let z=-N;z<N;z++)for(const b of basis){
+    for(const [A,o] of [[1,0],[0,.25]]){const q=[x+b[0]+o,y+b[1]+o,z+b[2]+o];
+      if(Math.hypot(q[0]*1.0,q[1]*1.25,q[2])<3.1)atoms.push({p:q,A});}}
+  const bonds=[];const key=a=>a.p.map(v=>Math.round(v*4)).join(',');const map=new Map(atoms.map((a,i)=>[key(a),i]));
+  atoms.forEach((a,i)=>{if(!a.A)return;for(const d of [[.25,.25,.25],[.25,-.25,-.25],[-.25,.25,-.25],[-.25,-.25,.25]]){
+    const j=map.get(key({p:[a.p[0]+d[0],a.p[1]+d[1],a.p[2]+d[2]]}));if(j!==undefined)bonds.push([i,j]);}});
+  // rotação: vista próxima de [110], levemente inclinada
+  const ay=Math.PI/4+.22, ax=.42, az=.18;
+  function tr(p){let [x,y,z]=p; let c=Math.cos(ay),s=Math.sin(ay); [x,z]=[x*c+z*s,-x*s+z*c];
+    c=Math.cos(ax);s=Math.sin(ax); [y,z]=[y*c-z*s,y*s+z*c]; c=Math.cos(az);s=Math.sin(az); [x,y]=[x*c-y*s,x*s+y*c];
+    z+=7.2; const f=H*.95/z; return {x:W*.67+x*f,y:H*.5+y*f,z,f};}
+  const P=atoms.map(a=>tr(a.p));
+  const zmin=Math.min(...P.map(p=>p.z)), zmax=Math.max(...P.map(p=>p.z)), focus=zmin+(zmax-zmin)*.38;
+  const items=[]; bonds.forEach(([i,j])=>items.push({t:'b',i,j,z:(P[i].z+P[j].z)/2})); P.forEach((p,i)=>items.push({t:'a',i,z:p.z}));
+  items.sort((a,b)=>b.z-a.z);
+  // camadas por profundidade: cada uma é desfocada uma vez só
+  const NL=7, layers=[...Array(NL)].map(()=>{const c=document.createElement('canvas');c.width=W;c.height=H;return c;});
+  const lz=z=>Math.min(NL-1,Math.floor((z-zmin)/(zmax-zmin+1e-6)*NL));
+  for(const it of items){
+    const zf=(it.z-zmin)/(zmax-zmin);
+    const fade=Math.max(0,1-zf*.7);
+    const px=it.t==='a'?P[it.i].x:(P[it.i].x+P[it.j].x)/2;
+    const side=Math.min(1,Math.max(0,(px-W*.22)/(W*.25)));
+    const alpha=fade*side; if(alpha<.02)continue;
+    const c=layers[lz(it.z)].getContext('2d');
+    if(it.t==='b'){const a=P[it.i],b=P[it.j];const gr=c.createLinearGradient(a.x,a.y,b.x,b.y);
+      gr.addColorStop(0,`rgba(120,180,255,${.55*alpha})`);gr.addColorStop(.5,`rgba(190,225,255,${.75*alpha})`);gr.addColorStop(1,`rgba(120,180,255,${.55*alpha})`);
+      c.strokeStyle=gr;c.lineWidth=a.f*.045;c.lineCap='round';c.beginPath();c.moveTo(a.x,a.y);c.lineTo(b.x,b.y);c.stroke();}
+    else{const a=P[it.i],r=a.f*.085;
+      const sg=c.createRadialGradient(a.x-r*.35,a.y-r*.4,r*.05,a.x,a.y,r);
+      sg.addColorStop(0,`rgba(255,255,255,${.95*alpha})`);sg.addColorStop(.35,`rgba(150,200,255,${.85*alpha})`);
+      sg.addColorStop(.8,`rgba(40,100,230,${.7*alpha})`);sg.addColorStop(1,`rgba(20,60,180,0)`);
+      c.fillStyle=sg;c.beginPath();c.arc(a.x,a.y,r,0,7);c.fill();
+      c.fillStyle=`rgba(80,150,255,${.12*alpha})`;c.beginPath();c.arc(a.x,a.y,r*2.4,0,7);c.fill();}
+  }
+  for(let L=NL-1;L>=0;L--){
+    const zc=zmin+(L+.5)/NL*(zmax-zmin); const blur=Math.abs(zc-focus)*W/1920*4.2;
+    g.filter=blur>.6?`blur(${blur.toFixed(1)}px)`:'none'; g.drawImage(layers[L],0,0);
+  }
+  g.filter='none'; vignette(g,.45); grain(g,6);
+}
+
+// ================= 4. CIRCUITO (escuro, canvas) =================
+function circuit(){
+  const g=cv.getContext('2d'), k=W/1920;
+  const bg=g.createRadialGradient(W*.68,H*.5,0,W*.68,H*.5,W*.75); bg.addColorStop(0,'#0b2258'); bg.addColorStop(.45,'#06112c'); bg.addColorStop(1,'#020510');
+  g.fillStyle=bg; g.fillRect(0,0,W,H);
+  const cx=W*.68, cy=H*.5, cs=150*k, step=18*k;
+  const dirs=[[1,0],[1,-1],[0,-1],[-1,-1],[-1,0],[-1,1],[0,1],[1,1]];
+  const traces=[];
+  // saídas dos 4 lados do chip
+  for(let side=0;side<4;side++){
+    const n=12;
+    for(let i=0;i<n;i++){
+      const t=(i+.5)/n*2-1; let x,y,d;
+      if(side===0){x=cx+cs;y=cy+t*cs*.9;d=0;} if(side===1){x=cx+t*cs*.9;y=cy-cs;d=2;}
+      if(side===2){x=cx-cs;y=cy+t*cs*.9;d=4;} if(side===3){x=cx+t*cs*.9;y=cy+cs;d=6;}
+      const pts=[[x,y]]; let len=0; const maxLen=(380+rnd()*900)*k;
+      let seg=(30+rnd()*120)*k;
+      while(len<maxLen){
+        const [dx,dy]=dirs[d]; const L=dx&&dy?seg/1.41:seg; x+=dx*L; y+=dy*L; len+=seg; pts.push([x,y]);
+        // curva de 45° afastando do centro (leque)
+        const turn=(rnd()<.5?1:-1); const nd=(d+turn+8)%8; const [nx,ny]=dirs[nd];
+        const away=(x-cx)*nx+(y-cy)*ny>(x-cx)*dirs[d][0]+(y-cy)*dirs[d][1]-1e9;
+        d = rnd()<.55 ? nd : d; if(d%2===1 && rnd()<.6) d=(d+(rnd()<.5?1:-1)+8)%8;
+        // nunca voltar para o chip
+        const [ddx,ddy]=dirs[d]; if((x-cx)*ddx+(y-cy)*ddy<0) d=side*2;
+        seg=(40+rnd()*160)*k;
+      }
+      traces.push({pts,w:(1.6+rnd()*1.6)*k,b:.35+rnd()*.65});
+    }
+  }
+  // desenha: brilho + linha
+  for(const pass of [0,1]){
+    for(const tr of traces){
+      const [ex,ey]=tr.pts[tr.pts.length-1];
+      const lg=g.createLinearGradient(tr.pts[0][0],tr.pts[0][1],ex,ey);
+      lg.addColorStop(0,`rgba(140,200,255,${tr.b})`); lg.addColorStop(1,`rgba(60,110,255,${tr.b*.15})`);
+      g.strokeStyle=lg; g.lineJoin='round'; g.lineCap='round';
+      g.lineWidth=pass?tr.w:tr.w*5; g.filter=pass?'none':`blur(${6*k}px)`; g.globalAlpha=pass?1:.55;
+      g.beginPath(); tr.pts.forEach(([x,y],i)=>i?g.lineTo(x,y):g.moveTo(x,y)); g.stroke();
+      if(pass){ g.fillStyle=`rgba(170,215,255,${tr.b*.5})`; g.beginPath(); g.arc(ex,ey,tr.w*2.6,0,7); g.fill();
+        g.fillStyle='#030817'; g.beginPath(); g.arc(ex,ey,tr.w*1.3,0,7); g.fill(); }
+    }
+  }
+  g.filter='none'; g.globalAlpha=1;
+  // chip de vidro
+  const r=24*k;
+  g.save(); g.shadowColor='rgba(70,140,255,.9)'; g.shadowBlur=90*k;
+  const cg=g.createLinearGradient(cx-cs,cy-cs,cx+cs,cy+cs); cg.addColorStop(0,'rgba(120,170,255,.38)'); cg.addColorStop(.5,'rgba(40,80,200,.25)'); cg.addColorStop(1,'rgba(20,40,120,.45)');
+  g.fillStyle=cg; roundRect(g,cx-cs,cy-cs,cs*2,cs*2,r); g.fill(); g.restore();
+  g.strokeStyle='rgba(200,230,255,.85)'; g.lineWidth=2.4*k; roundRect(g,cx-cs,cy-cs,cs*2,cs*2,r); g.stroke();
+  // núcleo interno
+  const ci=cs*.55; const ig=g.createLinearGradient(cx-ci,cy-ci,cx+ci,cy+ci); ig.addColorStop(0,'rgba(170,210,255,.55)'); ig.addColorStop(1,'rgba(60,110,255,.25)');
+  g.fillStyle=ig; roundRect(g,cx-ci,cy-ci,ci*2,ci*2,r*.6); g.fill();
+  g.strokeStyle='rgba(220,240,255,.6)'; g.lineWidth=1.5*k; roundRect(g,cx-ci,cy-ci,ci*2,ci*2,r*.6); g.stroke();
+  // reflexo no topo do chip
+  const hl=g.createLinearGradient(0,cy-cs,0,cy-cs*.2); hl.addColorStop(0,'rgba(255,255,255,.35)'); hl.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=hl; roundRect(g,cx-cs+3*k,cy-cs+3*k,cs*2-6*k,cs*.8,r); g.fill();
+  vignette(g,.5); grain(g,6);
+}
+function roundRect(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath();}
+function vignette(g,a){const v=g.createRadialGradient(W/2,H/2,H*.3,W/2,H/2,W*.75);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,`rgba(0,0,0,${a})`);g.fillStyle=v;g.fillRect(0,0,W,H);}
+function grain(g,amt){const d=g.getImageData(0,0,W,H),p=d.data;for(let i=0;i<p.length;i+=4){const n=(Math.random()-.5)*amt;p[i]+=n;p[i+1]+=n;p[i+2]+=n;}g.putImageData(d,0,0);}
+
+setTimeout(()=>{try{({wafer:()=>runShader(WAFER),glass:()=>runShader(GLASS),caustic:()=>runShader(CAUSTIC),lattice,circuit})[ID]();document.title='done';}
+catch(e){document.title='done';console.log('ERR '+e.message);}},50);
+</script></body></html>
