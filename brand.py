@@ -11,6 +11,8 @@ from PIL import Image, ImageFilter
 
 # name -> logo variant
 WALLPAPERS = {
+    "silicio-light.jpg": "color",
+    "silicio-dark.jpg": "white",
     "archlingmo-light.jpg": "white",
     "archlingmo-dark.jpg": "white",
     "archmac-light.jpg": "color",
