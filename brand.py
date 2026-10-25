@@ -13,6 +13,11 @@ from PIL import Image, ImageFilter
 WALLPAPERS = {
     "silicio-light.jpg": "color",
     "silicio-dark.jpg": "white",
+    "silicio-circuito-escuro.jpg": "white",
+    "silicio-cristal-escuro.jpg": "white",
+    "silicio-wafer-escuro.jpg": "white",
+    "silicio-luz-claro.jpg": "color",
+    "silicio-vidro-claro.jpg": "color",
     "archlingmo-light.jpg": "white",
     "archlingmo-dark.jpg": "white",
     "archmac-light.jpg": "color",
