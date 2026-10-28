@@ -1,0 +1,25 @@
+{
+  "version": "2.0",
+  "fidelidade": "recortado da arte aprovada, sem redesenho de personagens",
+  "source": "image(20261028-164427).png",
+  "original_source_size": [
+    1536,
+    1024
+  ],
+  "native_details": false,
+  "upscale_method": "Lanczos",
+  "expressions": [
+    "feliz",
+    "saudacao",
+    "curioso",
+    "surpreso",
+    "rindo",
+    "concentrado",
+    "apaixonado",
+    "dormindo",
+    "programando",
+    "ideia",
+    "confiante"
+  ],
+  "file_count": 40
+}

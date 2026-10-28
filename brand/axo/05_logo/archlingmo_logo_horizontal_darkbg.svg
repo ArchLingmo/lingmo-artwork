@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1250" height="360" viewBox="0 0 1250 360">
+<defs><linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#05BDFB"/><stop offset="1" stop-color="#0454EE"/></linearGradient><linearGradient id="lingmo" x1="0%" y1="0%" x2="100%" y2="0%"><stop stop-color="#00B7F5"/><stop offset="1" stop-color="#1657EC"/></linearGradient></defs>
+<circle cx="140" cy="150" r="120" fill="url(#bg)"/>
+<path d="M92 203 A72 72 0 1 1 200 194" fill="none" stroke="white" stroke-width="20" stroke-linecap="round"/>
+<path d="M97 196 L74 221 M165 177 L207 217" stroke="white" fill="none" stroke-width="20" stroke-linecap="round"/>
+<text x="305" y="190" font-size="105" font-family="DejaVu Sans, sans-serif" font-weight="bold" letter-spacing="-6" fill="#FFFFFF">Arch</text>
+<text x="573" y="190" font-size="105" font-family="DejaVu Sans, sans-serif" font-weight="bold" letter-spacing="-6" fill="url(#lingmo)">Lingmo</text>
+<text x="309" y="258" font-size="35" font-family="DejaVu Sans, sans-serif" fill="#DAE9FF">Seu sistema, sem fronteiras.</text>
+</svg>

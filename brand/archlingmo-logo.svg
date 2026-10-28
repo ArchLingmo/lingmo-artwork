@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="240" viewBox="0 0 1200 240">
+<defs>
+<linearGradient id="circle" x1=".05" y1="0" x2=".9" y2="1"><stop stop-color="#05BDFB"/><stop offset="1" stop-color="#0454EE"/></linearGradient>
+<linearGradient id="lingmo" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#00B7F5"/><stop offset="1" stop-color="#1657EC"/></linearGradient>
+</defs>
+<g transform="translate(0 0) scale(0.46875)">
+<circle cx="256" cy="256" r="249" fill="url(#circle)"/>
+<path d="M163 342 A143 143 0 1 1 375 324" fill="none" stroke="white" stroke-width="36" stroke-linecap="round"/>
+<path d="M172 332 L130 375 M300 294 L381 373" fill="none" stroke="white" stroke-width="36" stroke-linecap="round"/>
+</g>
+<text x="272" y="162" font-family="Inter" font-weight="700" font-size="150" letter-spacing="-4"><tspan fill="#091323">Arch</tspan><tspan fill="url(#lingmo)">Lingmo</tspan></text>
+</svg>

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Puts the Lingmo OS logo on the wallpapers: source/<name> -> wallpapers/<name>.
+"""Puts the ArchLingmo logo on the wallpapers: source/<name> -> wallpapers/<name>.
 
 The logo sits at the top left, just below the status bar, like on the upstream
 Lingmo wallpapers. Dark backgrounds get the brand-colour logo; light or vivid
@@ -18,11 +18,15 @@ WALLPAPERS = {
     "silicio-wafer-escuro.jpg": "white",
     "silicio-luz-claro.jpg": "color",
     "silicio-vidro-claro.jpg": "color",
-    "archlingmo-light.jpg": "white",
+    "archlingmo-light.jpg": "color",
     "archlingmo-dark.jpg": "white",
     "archmac-light.jpg": "color",
-    "archmac-dark.jpg": "color",
+    "archmac-dark.jpg": "white",
     "lingmo-arch-monterey-4k.png": "white",
+    "axo-dia.jpg": "color",
+    "axo-noite.jpg": "white",
+    "axo-ia.jpg": "white",
+    "axo-sonho.jpg": "white",
 }
 
 LOGO_HEIGHT = 0.055   # fraction of the wallpaper height
@@ -33,7 +37,7 @@ MARGIN_Y = 0.065      # fraction of the height, clears the status bar
 def brand(name, variant):
     wp = Image.open(f"source/{name}").convert("RGBA")
     W, H = wp.size
-    logo = Image.open("brand/lingmo-logo-white.png" if variant == "white" else "brand/lingmo-logo.png")
+    logo = Image.open("brand/archlingmo-logo-white.png" if variant == "white" else "brand/archlingmo-logo.png")
     h = round(H * LOGO_HEIGHT)
     logo = logo.resize((round(logo.width * h / logo.height), h), Image.LANCZOS)
     pos = (round(W * MARGIN_X), round(H * MARGIN_Y))

@@ -9,4 +9,6 @@ install(FILES wallpapers/lingmo-arch-monterey-4k.png
               wallpapers/silicio-vidro-claro.jpg
               wallpapers/archlingmo-light.jpg wallpapers/archlingmo-dark.jpg
               wallpapers/archmac-light.jpg wallpapers/archmac-dark.jpg
+              wallpapers/axo-dia.jpg wallpapers/axo-noite.jpg
+              wallpapers/axo-ia.jpg wallpapers/axo-sonho.jpg
         DESTINATION ${CMAKE_INSTALL_PREFIX}/share/backgrounds/lingmoos)
